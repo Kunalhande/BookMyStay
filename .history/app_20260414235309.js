@@ -1,18 +1,24 @@
+if(process.env.NODE_ENV !="production"){
+    require('dotenv').config();
+}
+
 const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
-const Listing = require("./models/listing")
 const path = require("path");
 const method = require("method-override");
 const ejsMate = require("ejs-mate");
-const wrapAsync = require("./utils/wrapAsync");
 const ExpressError = require("./utils/ExpressError");
-const { listingSchema, reviewSchema  } =require("./schema.js");
-const Review = require("./models/review");
+const session = require("express-session");
+const flash = require("connect-flash");
+const passport = require("passport");
+const LocalStrategy = require("passport-local");
+const User = require("./models/user.js");
 
 
-const listings = require("./routes/listing.js");
-const listings = require("./routes/review.js");
+const listingRouter = require("./routes/listing.js");
+const reviewRouter = require("./routes/review.js");
+const userRouter = require("./routes/user.js");
 
 
 const MONGO_URL ="mongodb://127.0.0.1:27017/test";
@@ -20,7 +26,7 @@ const MONGO_URL ="mongodb://127.0.0.1:27017/test";
 main().then(() =>{
     console.log("connected to DB");
 }).catch(() =>{
-    console.log(err);
+    console.log(err); 
 });
 
 async function main() {
@@ -50,25 +56,48 @@ app.use(express.urlencoded({extended:true}));  //to parse all data comes in requ
 app.use(method("_method"));
 app.use(express.static(path.join(__dirname,"/public")));
 
-
-app.get("/", (req,res) =>{
-    res.send("Hi, I am root");
-});
-
-
-
-const validateReview = (req, res, next) => {
-  const { error } = reviewSchema.validate(req.body);
-  if (error) {
-    const msg = error.details.map(el => el.message).join(",");
-    throw new ExpressError(400, msg);
-  } else {
-    next();
-  }
+const sessionOption = {
+    secret: "mysupersecretcode",
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        expires: Date.now() * 7 * 24 * 60 * 60 * 1000,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+    }
 };
 
+// app.get("/", (req,res) =>{
+//     res.send("Hi, I am root");
+// });
 
-app.use("/listings", listings);
+app.use(session(sessionOption));
+app.use(flash());
+
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+app.use((req,res,next) =>{
+    res.locals.success = req.flash("success");
+    res.locals.error = req.flash("error");
+    res.locals.currUser = req.user;
+    next();
+});
+
+// app.get("/demouser", async(req,res) =>{
+//     let fakeUser = new User ({
+//         email:"student@gmail.com",
+//         username:"random-one",
+//     });
+
+//    let registeredUser = await  User.register(fakeUser, "halloword");
+//    res.send(registeredUser);
+// });
+
+app.use("/", userRouter);
+app.use("/listings/:id/reviews", reviewRouter);
+app.use("/listings", listingRouter);
+
 
 
 // app.use((err,req,res,next) =>{
